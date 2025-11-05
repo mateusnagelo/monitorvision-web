@@ -1,11 +1,23 @@
 import React, { createContext, useContext, useEffect, useMemo, useState } from 'react'
 
+export type FirebaseConfig = {
+  apiKey: string
+  authDomain: string
+  projectId: string
+  storageBucket?: string
+  messagingSenderId?: string
+  appId: string
+  measurementId?: string
+} | null
+
 export type AppConfig = {
   cnpjApiBase: string
   ibptPageUrl: string
   ibptCsvUrl: string
   cosmosApiBase: string
   cosmosToken: string
+  firebaseEnabled: boolean
+  firebaseConfig: FirebaseConfig
 }
 
 const DEFAULT_CONFIG: AppConfig = {
@@ -15,6 +27,8 @@ const DEFAULT_CONFIG: AppConfig = {
   cosmosApiBase: 'https://api.cosmos.bluesoft.com.br',
   // Token inicial fornecido pelo usuário; pode ser alterado nas Configurações
   cosmosToken: 'Ts9bLK2j2nyrnaxyZ-0_HQ',
+  firebaseEnabled: false,
+  firebaseConfig: null,
 }
 
 const ConfigContext = createContext<{
@@ -32,14 +46,14 @@ export function ConfigProvider({ children }: { children: React.ReactNode }) {
         // Em desenvolvimento, usar proxies locais quando disponíveis
         if (import.meta.env.DEV) {
           merged.ibptCsvUrl = DEFAULT_CONFIG.ibptCsvUrl
-          merged.cosmosApiBase = '/cosmos'
+          merged.cosmosApiBase = '/api/cosmos'
         }
         return merged
       }
     } catch {}
     // Em desenvolvimento, usar proxies locais quando disponíveis
     if (import.meta.env.DEV) {
-      return { ...DEFAULT_CONFIG, ibptCsvUrl: '/ibpt-csv', cosmosApiBase: '/cosmos' }
+      return { ...DEFAULT_CONFIG, ibptCsvUrl: '/ibpt-csv', cosmosApiBase: '/api/cosmos' }
     }
     return DEFAULT_CONFIG
   })

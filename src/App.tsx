@@ -10,6 +10,9 @@ import Logs from './pages/Logs'
 import CosmosLookup from './pages/CosmosLookup'
 import { useMemo, useState } from 'react'
 import { ThemeProvider, createTheme, CssBaseline } from '@mui/material'
+import SpeedTest from './pages/SpeedTest'
+import PortCheck from './pages/PortCheck'
+import XMLConverter from './pages/XMLConverter'
 
 export default function App() {
   const location = useLocation()
@@ -42,6 +45,9 @@ export default function App() {
           <Route path="/ibptax" element={<IBPTax />} />
           <Route path="/xml" element={<XMLValidation />} />
           <Route path="/cnpj" element={<CNPJLookup />} />
+          <Route path="/speed" element={<SpeedTest />} />
+          <Route path="/ports" element={<PortCheck />} />
+          <Route path="/xml-converter" element={<XMLConverter />} />
 
           <Route path="/clientes" element={<Clients />} />
           <Route path="/config" element={<Settings />} />

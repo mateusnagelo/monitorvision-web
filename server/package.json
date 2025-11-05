@@ -1,0 +1,12 @@
+{
+  "name": "server",
+  "version": "1.0.0",
+  "main": "index.ts",
+  "type": "commonjs",
+  "scripts": {
+    "start": "ts-node-dev --project tsconfig.json --respawn --transpile-only index.ts"
+  },
+  "dependencies": {
+    "canvas": "^3.2.0"
+  }
+}

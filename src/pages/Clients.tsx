@@ -5,6 +5,9 @@ import AddBusinessIcon from '@mui/icons-material/AddBusiness'
 import CleaningServicesIcon from '@mui/icons-material/CleaningServices'
 import SearchIcon from '@mui/icons-material/Search'
 import { useNavigate } from 'react-router-dom'
+import { useConfig } from '../context/ConfigContext'
+import { initFirebase, getFirebase, deleteClientFromFirestore, clearClientsFromFirestore } from '../services/firebase'
+import { onSnapshot, collection } from 'firebase/firestore'
 
 function maskCNPJ(input: any) {
   const digits = String(input ?? '').replace(/\D/g, '').slice(0, 14)
@@ -17,16 +20,34 @@ export default function Clients() {
   const [filter, setFilter] = useState('')
   const [snack, setSnack] = useState<{ open: boolean, message: string, severity: 'success' | 'warning' | 'error' }>({ open: false, message: '', severity: 'success' })
   const navigate = useNavigate()
+  const { config } = useConfig()
 
   useEffect(() => {
-    try {
-      const raw = localStorage.getItem('clients')
-      const list = JSON.parse(raw || '[]')
-      setClients(Array.isArray(list) ? list : [])
-    } catch {
-      setClients([])
+    let unsub: any
+    const setup = async () => {
+      try {
+        if (config.firebaseEnabled && (config.firebaseConfig as any)?.apiKey) {
+          try { getFirebase() } catch { initFirebase(config.firebaseConfig as any) }
+          const { db } = getFirebase()
+          unsub = onSnapshot(collection(db!, 'clientes'), (snap) => {
+            const arr = snap.docs.map((d) => ({ cnpj: d.id, ...(d.data() as any) }))
+            setClients(arr)
+          })
+          return
+        }
+      } catch {}
+      // Fallback para localStorage
+      try {
+        const raw = localStorage.getItem('clients')
+        const list = JSON.parse(raw || '[]')
+        setClients(Array.isArray(list) ? list : [])
+      } catch {
+        setClients([])
+      }
     }
-  }, [])
+    setup()
+    return () => { if (typeof unsub === 'function') unsub() }
+  }, [config.firebaseEnabled])
 
   const filtered = useMemo(() => {
     const q = filter.trim().toLowerCase()
@@ -39,6 +60,12 @@ export default function Clients() {
   }, [clients, filter])
 
   const removeClient = (cnpj: string) => {
+    if (config.firebaseEnabled) {
+      deleteClientFromFirestore(cnpj)
+        .then(() => setSnack({ open: true, message: 'Cliente removido.', severity: 'success' }))
+        .catch(() => setSnack({ open: true, message: 'Falha ao remover cliente.', severity: 'error' }))
+      return
+    }
     const next = clients.filter((c) => String(c?.cnpj) !== String(cnpj))
     setClients(next)
     localStorage.setItem('clients', JSON.stringify(next))
@@ -46,6 +73,12 @@ export default function Clients() {
   }
 
   const clearAll = () => {
+    if (config.firebaseEnabled) {
+      clearClientsFromFirestore()
+        .then(() => setSnack({ open: true, message: 'Lista de clientes limpa.', severity: 'success' }))
+        .catch(() => setSnack({ open: true, message: 'Falha ao limpar clientes.', severity: 'error' }))
+      return
+    }
     setClients([])
     localStorage.setItem('clients', JSON.stringify([]))
     setSnack({ open: true, message: 'Lista de clientes limpa.', severity: 'success' })

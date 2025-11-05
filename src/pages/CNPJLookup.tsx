@@ -5,6 +5,7 @@ import PictureAsPdfIcon from '@mui/icons-material/PictureAsPdf'
 import SearchIcon from '@mui/icons-material/Search'
 import { useConfig } from '../context/ConfigContext'
 import { fetchCNPJ } from '../services/cnpj'
+import { initFirebase, getFirebase, addLogToFirestore, saveClientToFirestore } from '../services/firebase'
 
 function formatCNPJ(input: string) {
   // Remove tudo que não é dígito e limita a 14 dígitos
@@ -270,7 +271,17 @@ export default function CNPJLookup() {
       setData(null)
       // Logar consulta inválida
       const { computer, ip } = await getMachineInfo()
-      appendLog({ timestamp: new Date().toISOString(), cnpj: cnpj, empresa: null, computer, ip, success: false, error: 'CNPJ inválido' })
+      const entry = { timestamp: new Date().toISOString(), cnpj: cnpj, empresa: null, computer, ip, success: false, error: 'CNPJ inválido' }
+      try {
+        if (config.firebaseEnabled && (config.firebaseConfig as any)?.apiKey) {
+          try { getFirebase() } catch { initFirebase(config.firebaseConfig as any) }
+          await addLogToFirestore(entry)
+        } else {
+          appendLog(entry)
+        }
+      } catch {
+        appendLog(entry)
+      }
       return
     }
     setLoading(true)
@@ -281,19 +292,39 @@ export default function CNPJLookup() {
       // Logar sucesso
       const { computer, ip } = await getMachineInfo()
       const f = extractFields(result)
-      appendLog({ timestamp: new Date().toISOString(), cnpj: digits, empresa: f?.nome || f?.fantasia || null, computer, ip, success: true, error: null })
+      const entry = { timestamp: new Date().toISOString(), cnpj: digits, empresa: f?.nome || f?.fantasia || null, computer, ip, success: true, error: null }
+      try {
+        if (config.firebaseEnabled && (config.firebaseConfig as any)?.apiKey) {
+          try { getFirebase() } catch { initFirebase(config.firebaseConfig as any) }
+          await addLogToFirestore(entry)
+        } else {
+          appendLog(entry)
+        }
+      } catch {
+        appendLog(entry)
+      }
     } catch (e: any) {
       setError(e?.message || 'Falha ao consultar CNPJ')
       setData(null)
       // Logar erro
       const { computer, ip } = await getMachineInfo()
-      appendLog({ timestamp: new Date().toISOString(), cnpj: digits, empresa: null, computer, ip, success: false, error: String(e?.message || e) })
+      const entry = { timestamp: new Date().toISOString(), cnpj: digits, empresa: null, computer, ip, success: false, error: String(e?.message || e) }
+      try {
+        if (config.firebaseEnabled && (config.firebaseConfig as any)?.apiKey) {
+          try { getFirebase() } catch { initFirebase(config.firebaseConfig as any) }
+          await addLogToFirestore(entry)
+        } else {
+          appendLog(entry)
+        }
+      } catch {
+        appendLog(entry)
+      }
     } finally {
       setLoading(false)
     }
   }
 
-  const handleRegisterClient = () => {
+  const handleRegisterClient = async () => {
     if (!data) return
     const f = extractFields(data)
     const key = 'clients'
@@ -304,7 +335,7 @@ export default function CNPJLookup() {
     } catch { list = [] }
 
     const exists = list.some((c) => String(c?.cnpj) === String(f.cnpj))
-    if (exists) {
+    if (exists && !config.firebaseEnabled) {
       setSnack({ open: true, message: 'Cliente já cadastrado para este CNPJ.', severity: 'warning' })
       return
     }
@@ -321,6 +352,18 @@ export default function CNPJLookup() {
       uf: f.endereco.uf,
       criadoEm: new Date().toISOString(),
     }
+
+    if (config.firebaseEnabled && (config.firebaseConfig as any)?.apiKey) {
+      try { getFirebase() } catch { initFirebase(config.firebaseConfig as any) }
+      try {
+        await saveClientToFirestore(client)
+        setSnack({ open: true, message: 'Cliente cadastrado com sucesso!', severity: 'success' })
+      } catch {
+        setSnack({ open: true, message: 'Falha ao cadastrar cliente no Firebase.', severity: 'error' })
+      }
+      return
+    }
+
     list.push(client)
     localStorage.setItem(key, JSON.stringify(list))
     setSnack({ open: true, message: 'Cliente cadastrado com sucesso!', severity: 'success' })

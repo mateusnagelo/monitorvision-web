@@ -29,6 +29,9 @@ import ListAlt from '@mui/icons-material/ListAlt'
 import SearchIcon from '@mui/icons-material/Search'
 import Brightness4 from '@mui/icons-material/Brightness4'
 import Brightness7 from '@mui/icons-material/Brightness7'
+import AssessmentIcon from '@mui/icons-material/Assessment'
+import BugReportIcon from '@mui/icons-material/BugReport'
+import TransformIcon from '@mui/icons-material/Transform';
 
 const drawerWidth = 280
 
@@ -69,8 +72,11 @@ export default function AppLayout({ mode, onToggleMode }: AppLayoutProps) {
       { to: '/', label: 'Dashboard', icon: <DashboardIcon /> },
       { to: '/ibptax', label: 'Tabela IBPTax', icon: <TableChart /> },
       { to: '/xml', label: 'Validação XML', icon: <CodeIcon /> },
+      { to: '/xml-converter', label: 'Conversor XML', icon: <TransformIcon /> },
       { to: '/cnpj', label: 'Consulta CNPJ', icon: <Business /> },
       { to: '/cosmos', label: 'Consulta Cosmos', icon: <TableChart /> },
+      { to: '/speed', label: 'Teste de Velocidade', icon: <AssessmentIcon /> },
+      { to: '/ports', label: 'Consulta de Porta', icon: <BugReportIcon /> },
       { to: '/clientes', label: 'Clientes', icon: <People /> },
       { to: '/config', label: 'Configurações', icon: <SettingsIcon /> },
       { to: '/logs', label: 'Logs', icon: <ListAlt /> },

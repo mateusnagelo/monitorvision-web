@@ -2,6 +2,9 @@ import { useEffect, useMemo, useState } from 'react'
 import { Alert, Box, Button, Chip, Paper, Snackbar, Stack, Table, TableBody, TableCell, TableHead, TableRow, TextField, Typography } from '@mui/material'
 import CleaningServicesIcon from '@mui/icons-material/CleaningServices'
 import SearchIcon from '@mui/icons-material/Search'
+import { useConfig } from '../context/ConfigContext'
+import { initFirebase, getFirebase, clearLogsFromFirestore } from '../services/firebase'
+import { collection, onSnapshot, query, orderBy } from 'firebase/firestore'
 
 function formatDateTime(iso?: string) {
   if (!iso) return '-'
@@ -12,11 +15,34 @@ function formatDateTime(iso?: string) {
 }
 
 export default function Logs() {
+  const { config } = useConfig()
   const [logs, setLogs] = useState<any[]>([])
   const [filter, setFilter] = useState('')
   const [snack, setSnack] = useState<{ open: boolean, message: string, severity: 'success' | 'warning' | 'error' }>({ open: false, message: '', severity: 'success' })
 
   useEffect(() => {
+    if (config.firebaseEnabled && (config.firebaseConfig as any)?.apiKey) {
+      try { getFirebase() } catch { initFirebase(config.firebaseConfig as any) }
+      const { db } = getFirebase()
+      const q = query(collection(db!, 'logs'), orderBy('createdAt', 'desc'))
+      const unsub = onSnapshot(q, (snap) => {
+        const list: any[] = []
+        snap.forEach((d) => list.push({ id: d.id, ...d.data() }))
+        setLogs(list)
+      }, () => {
+        // Fallback para localStorage em caso de erro
+        try {
+          const raw = localStorage.getItem('monitorVision.logs')
+          const list = JSON.parse(raw || '[]')
+          setLogs(Array.isArray(list) ? list.reverse() : [])
+        } catch {
+          setLogs([])
+        }
+      })
+      return () => unsub()
+    }
+
+    // Fallback localStorage
     try {
       const raw = localStorage.getItem('monitorVision.logs')
       const list = JSON.parse(raw || '[]')
@@ -24,7 +50,7 @@ export default function Logs() {
     } catch {
       setLogs([])
     }
-  }, [])
+  }, [config.firebaseEnabled])
 
   const filtered = useMemo(() => {
     const q = filter.trim().toLowerCase()
@@ -38,6 +64,13 @@ export default function Logs() {
   }, [logs, filter])
 
   const clearAll = () => {
+    if (config.firebaseEnabled && (config.firebaseConfig as any)?.apiKey) {
+      try { getFirebase() } catch { initFirebase(config.firebaseConfig as any) }
+      clearLogsFromFirestore()
+        .then(() => setSnack({ open: true, message: 'Logs limpos.', severity: 'success' }))
+        .catch(() => setSnack({ open: true, message: 'Falha ao limpar logs no Firebase.', severity: 'error' }))
+      return
+    }
     localStorage.setItem('monitorVision.logs', JSON.stringify([]))
     setLogs([])
     setSnack({ open: true, message: 'Logs limpos.', severity: 'success' })
@@ -82,22 +115,20 @@ export default function Logs() {
                 <TableCell>Empresa</TableCell>
                 <TableCell>Computador</TableCell>
                 <TableCell>IP</TableCell>
-                <TableCell>Resultado</TableCell>
-                <TableCell>Mensagem</TableCell>
+                <TableCell>Status</TableCell>
               </TableRow>
             </TableHead>
             <TableBody>
-              {filtered.map((l, idx) => (
-                <TableRow key={`${l.timestamp}-${l.cnpj}-${idx}`} hover>
+              {filtered.map((l: any) => (
+                <TableRow key={l.id || `${l.timestamp}-${l.cnpj}`}>
                   <TableCell>{formatDateTime(l.timestamp)}</TableCell>
                   <TableCell>{l.cnpj}</TableCell>
                   <TableCell>{l.empresa || '-'}</TableCell>
                   <TableCell>{l.computer || '-'}</TableCell>
                   <TableCell>{l.ip || '-'}</TableCell>
                   <TableCell>
-                    <Chip label={l.success ? 'Sucesso' : 'Falha'} color={l.success ? 'success' : 'error'} size="small" />
+                    <Chip label={l.success ? 'SUCESSO' : 'ERRO'} color={l.success ? 'success' : 'error'} size="small" />
                   </TableCell>
-                  <TableCell>{l.error || '-'}</TableCell>
                 </TableRow>
               ))}
             </TableBody>
