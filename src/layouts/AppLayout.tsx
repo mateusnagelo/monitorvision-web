@@ -73,6 +73,7 @@ export default function AppLayout({ mode, onToggleMode }: AppLayoutProps) {
       { to: '/ibptax', label: 'Tabela IBPTax', icon: <TableChart /> },
       { to: '/xml', label: 'Validação XML', icon: <CodeIcon /> },
       { to: '/xml-converter', label: 'Conversor XML', icon: <TransformIcon /> },
+      { to: '/xml-report', label: 'Relatório XMLs', icon: <AssessmentIcon /> },
       { to: '/cnpj', label: 'Consulta CNPJ', icon: <Business /> },
       { to: '/cosmos', label: 'Consulta Cosmos', icon: <TableChart /> },
       { to: '/speed', label: 'Teste de Velocidade', icon: <AssessmentIcon /> },

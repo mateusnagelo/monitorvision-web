@@ -13,6 +13,7 @@ import { ThemeProvider, createTheme, CssBaseline } from '@mui/material'
 import SpeedTest from './pages/SpeedTest'
 import PortCheck from './pages/PortCheck'
 import XMLConverter from './pages/XMLConverter'
+import XMLReport from './pages/XMLReport'
 
 export default function App() {
   const location = useLocation()
@@ -48,6 +49,7 @@ export default function App() {
           <Route path="/speed" element={<SpeedTest />} />
           <Route path="/ports" element={<PortCheck />} />
           <Route path="/xml-converter" element={<XMLConverter />} />
+          <Route path="/xml-report" element={<XMLReport />} />
 
           <Route path="/clientes" element={<Clients />} />
           <Route path="/config" element={<Settings />} />

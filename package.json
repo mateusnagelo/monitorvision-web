@@ -24,6 +24,7 @@
     "cors": "^2.8.5",
     "dayjs": "^1.11.13",
     "express": "^5.1.0",
+    "fast-xml-parser": "^5.3.1",
     "file-saver": "^2.0.5",
     "firebase": "^12.5.0",
     "framer-motion": "^12.23.24",
@@ -39,7 +40,8 @@
     "react-dropzone": "^14.3.8",
     "react-router-dom": "^6.26.2",
     "tailwind-merge": "^3.3.1",
-    "tailwindcss-animate": "^1.0.7"
+    "tailwindcss-animate": "^1.0.7",
+    "xlsx": "^0.18.5"
   },
   "devDependencies": {
     "@types/body-parser": "^1.19.6",
