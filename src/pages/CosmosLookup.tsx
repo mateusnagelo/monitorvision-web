@@ -1,5 +1,5 @@
-import { useState } from 'react'
-import { Alert, Box, Button, Divider, InputAdornment, Paper, Stack, TextField, Typography, CircularProgress, Chip } from '@mui/material'
+import { useState, useEffect } from 'react'
+import { Alert, Box, Button, Divider, Grid, InputAdornment, Paper, Stack, TextField, Typography, CircularProgress, Chip, TableContainer, Table, TableHead, TableRow, TableCell, TableBody } from '@mui/material'
 import SearchIcon from '@mui/icons-material/Search'
 import QrCodeIcon from '@mui/icons-material/QrCode'
 import TableChart from '@mui/icons-material/TableChart'
@@ -8,8 +8,34 @@ import { appendCosmosLog, fetchByEAN, searchProducts } from '../services/cosmos'
 import { fetchNCM } from '../services/ncm'
 import { FileText, Copy, ArrowRight } from 'lucide-react'
 import { motion } from 'framer-motion'
-import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card'
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
+
+
+import { ProductDetailModal } from '../components/ProductDetailModal'
+
+// Hook de debounce
+function useDebounce(value: string, delay: number) {
+  const [debouncedValue, setDebouncedValue] = useState(value)
+
+  useEffect(() => {
+    const handler = setTimeout(() => {
+      setDebouncedValue(value)
+    }, delay)
+
+    return () => {
+      clearTimeout(handler)
+    }
+  }, [value, delay])
+
+  return debouncedValue
+}
+
+interface UnifiedProduct {
+  gtin: string;
+  description: string;
+  ncm: { code: string; description: string };
+  source: 'Nome' | 'EAN' | 'NCM';
+  originalProduct: any;
+}
 
 function cleanDigits(input: string) {
   return input.replace(/\D/g, '')
@@ -22,39 +48,84 @@ export default function CosmosLookup() {
   const [nameQuery, setNameQuery] = useState('')
   const [eanQuery, setEanQuery] = useState('')
   const [ncmQuery, setNcmQuery] = useState('')
+
+  // Debounce das queries
+  const debouncedNameQuery = useDebounce(nameQuery, 500)
+  const debouncedEanQuery = useDebounce(eanQuery, 500)
+  const debouncedNcmQuery = useDebounce(ncmQuery, 500)
+
   const [loading, setLoading] = useState(false)
   const [errorGeneral, setErrorGeneral] = useState<string | null>(null)
   const [errorName, setErrorName] = useState<string | null>(null)
   const [errorEAN, setErrorEAN] = useState<string | null>(null)
   const [errorNCM, setErrorNCM] = useState<string | null>(null)
-  const [results, setResults] = useState<any>(null)
+  const [results, setResults] = useState<UnifiedProduct[]>([])
+  const [productForModal, setProductForModal] = useState<any>(null)
+  const [detailLoadingGtin, setDetailLoadingGtin] = useState<string | null>(null)
+
+  useEffect(() => {
+    // Evita a busca inicial com campos vazios
+    if (debouncedNameQuery.trim() || debouncedEanQuery.trim() || debouncedNcmQuery.trim()) {
+      handleSearch()
+    }
+  }, [debouncedNameQuery, debouncedEanQuery, debouncedNcmQuery])
+
+  const handleOpenDetails = async (product: any) => {
+    const gtinToFetch = product.gtin || getGtins(product)[0]
+
+    if (!gtinToFetch) {
+      setErrorGeneral('Produto sem código GTIN para consulta de detalhes.')
+      return
+    }
+
+    setDetailLoadingGtin(gtinToFetch)
+    setErrorGeneral(null)
+
+    try {
+      const fullProduct = await fetchByEAN(config.cosmosApiBase, config.cosmosToken, gtinToFetch)
+      setProductForModal(fullProduct)
+    } catch (e: any) {
+      setErrorGeneral(e?.message || 'Falha ao carregar detalhes do produto.')
+      setProductForModal(null)
+    } finally {
+      setDetailLoadingGtin(null)
+    }
+  }
 
   const handleSearch = async () => {
-    const name = nameQuery.trim()
-    const eanDigits = cleanDigits(eanQuery)
-    const ncmDigits = cleanDigits(ncmQuery)
-  
+    const name = debouncedNameQuery.trim()
+    const eanDigits = cleanDigits(debouncedEanQuery)
+    const ncmDigits = cleanDigits(debouncedNcmQuery)
+
     setErrorGeneral(null)
     setErrorName(null)
     setErrorEAN(null)
     setErrorNCM(null)
-    setResults(null)
-  
+    setResults([])
+
     if (!name && !eanDigits && !ncmDigits) {
       setErrorGeneral('Informe Nome do Produto, Código EAN/GTIN ou Código NCM.')
       return
     }
-  
+
     setLoading(true)
-  
-    let byName: any = null
-    let byEAN: any = null
-    let byNCM: any = null
-  
+    const newResults: UnifiedProduct[] = []
+
     // Busca por nome se informado
     if (name) {
       try {
-        byName = await searchProducts(config.cosmosApiBase, config.cosmosToken, name)
+        const byName = await searchProducts(config.cosmosApiBase, config.cosmosToken, name)
+        if (byName.products) {
+          byName.products.forEach((p: any) => {
+            newResults.push({
+              gtin: p.gtin || 'N/A',
+              description: p.description,
+              ncm: { code: p.ncm?.code || 'N/A', description: p.ncm?.description || '' },
+              source: 'Nome',
+              originalProduct: p,
+            })
+          })
+        }
         setErrorName(null)
         appendCosmosLog({ timestamp: new Date().toISOString(), type: 'NOME', query: name, success: true, error: null })
       } catch (e: any) {
@@ -62,14 +133,21 @@ export default function CosmosLookup() {
         appendCosmosLog({ timestamp: new Date().toISOString(), type: 'NOME', query: name, success: false, error: String(e?.message || e) })
       }
     }
-  
+
     // Busca por EAN se válido
     if (eanDigits) {
       if (eanDigits.length < 8) {
         setErrorEAN('Informe um EAN/GTIN válido (mín. 8 dígitos).')
       } else {
         try {
-          byEAN = await fetchByEAN(config.cosmosApiBase, config.cosmosToken, eanDigits)
+          const byEAN = await fetchByEAN(config.cosmosApiBase, config.cosmosToken, eanDigits)
+          newResults.push({
+            gtin: byEAN.gtin,
+            description: byEAN.description,
+            ncm: { code: byEAN.ncm?.code || 'N/A', description: byEAN.ncm?.description || '' },
+            source: 'EAN',
+            originalProduct: byEAN,
+          })
           setErrorEAN(null)
           appendCosmosLog({ timestamp: new Date().toISOString(), type: 'EAN', query: eanDigits, success: true, error: null })
         } catch (e: any) {
@@ -78,14 +156,26 @@ export default function CosmosLookup() {
         }
       }
     }
-  
+
     // Busca por NCM se válido
     if (ncmDigits) {
       if (ncmDigits.length !== 8) {
         setErrorNCM('Informe um código NCM com 8 dígitos.')
       } else {
         try {
-          byNCM = await fetchNCM(config.cosmosApiBase, config.cosmosToken, ncmDigits)
+          const byNCM = await fetchNCM(config.cosmosApiBase, config.cosmosToken, ncmDigits)
+          const products = extractProducts(byNCM)
+          if (products) {
+            products.slice(0, 20).forEach((p: any) => { // Limita a 20 produtos por NCM
+              newResults.push({
+                gtin: getGtins(p).join(', ') || 'N/A',
+                description: p.description || p.name,
+                ncm: { code: ncmDigits, description: byNCM.description || '' },
+                source: 'NCM',
+                originalProduct: { ...p, ncm: { code: ncmDigits, description: byNCM.description } },
+              })
+            })
+          }
           setErrorNCM(null)
           appendCosmosLog({ timestamp: new Date().toISOString(), type: 'NCM', query: ncmDigits, success: true, error: null })
         } catch (e: any) {
@@ -94,8 +184,8 @@ export default function CosmosLookup() {
         }
       }
     }
-  
-    setResults({ byName, byEAN, byNCM })
+
+    setResults(newResults)
     setLoading(false)
   }
 
@@ -213,152 +303,57 @@ export default function CosmosLookup() {
       {errorEAN && <Alert severity="error">Consulta por EAN/GTIN: {errorEAN}</Alert>}
       {errorNCM && <Alert severity="error">Consulta por NCM: {errorNCM}</Alert>}
 
-      {results && (
-        <Stack spacing={2}>
-          {results.byName && (
-            <Card>
-              <CardHeader>
-                <CardTitle>Resultado por Nome</CardTitle>
-                <CardDescription>
-                  {`Encontrados ${results.byName.products?.length || 0} produtos para "${nameQuery}"`}
-                </CardDescription>
-              </CardHeader>
-              <CardContent>
-                <Box sx={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))', gap: 2, alignItems: 'stretch' }}>
-                  {results.byName.products?.map((p: any, idx: number) => (
-                      <Card key={idx} className="flex flex-col h-full">
-                        <img
-                          src={p.thumbnail || 'https://via.placeholder.com/280x192'}
-                          alt={p.description}
-                          className="w-full h-48 object-cover rounded-t-lg"
-                        />
-                        <div className="p-4 flex flex-col flex-grow">
-                          <h3 className="text-lg font-semibold min-h-16 overflow-hidden" style={{ display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical' }}>{p.description}</h3>
-                          <div className="mt-auto">
-                              <p className="text-sm text-gray-600"><span className="font-bold">GTIN:</span> {p.gtin}</p>
-                              {p.ncm && <p className="text-sm text-gray-600"><span className="font-bold">NCM:</span> {p.ncm.code}</p>}
-                          </div>
-                        </div>
-                    </Card>
-                  ))}
-                </Box>
-              </CardContent>
-            </Card>
-          )}
-
-          {results.byEAN && (
-            <Card>
-                <CardHeader>
-                    <CardTitle>Resultado por EAN/GTIN</CardTitle>
-                    <CardDescription>{results.byEAN.description}</CardDescription>
-                </CardHeader>
-                <CardContent>
-                    <Stack spacing={1}>
-                        <div><Typography component="span" fontWeight="bold">GTIN:</Typography> {results.byEAN.gtin}</div>
-                        {results.byEAN.ncm && <div><Typography component="span" fontWeight="bold">NCM:</Typography> {results.byEAN.ncm.code} - {results.byEAN.ncm.description}</div>}
-                        {results.byEAN.gpc && <div><Typography component="span" fontWeight="bold">GPC:</Typography> {results.byEAN.gpc.code} - {results.byEAN.gpc.description}</div>}
-                        {results.byEAN.cest && <div><Typography component="span" fontWeight="bold">CEST:</Typography> {results.byEAN.cest.code} - {results.byEAN.cest.description}</div>}
-                        {results.byEAN.thumbnail && <img src={results.byEAN.thumbnail} alt={results.byEAN.description} style={{maxWidth: '150px', borderRadius: '8px', marginTop: '12px'}} />}
-                    </Stack>
-                </CardContent>
-                 <CardFooter>
-                    <Stack direction={{ xs: 'column', sm: 'row' }} spacing={1}>
-                        <Button
-                            variant="outlined"
-                            startIcon={<Copy size={16} />}
-                            onClick={() => copyToClipboard(JSON.stringify(results.byEAN, null, 2))}
-                        >
-                            Copiar JSON
-                        </Button>
-                        <Button
-                            variant="contained"
-                            startIcon={<FileText size={16} />}
-                            onClick={() => exportJson(results.byEAN, `ean-${cleanDigits(eanQuery)}.json`)}
-                        >
-                            Exportar JSON
-                        </Button>
-                    </Stack>
-                </CardFooter>
-            </Card>
-          )}
-
-          {results.byNCM && (
-            <Card>
-              <CardHeader>
-                <CardTitle>Resultado por NCM</CardTitle>
-                <CardDescription>
-                  {(() => {
-                    const info = extractNcmInfo(results.byNCM)
-                    return info.code ? `NCM ${info.code} - ${info.description}` : 'Código NCM'
-                  })()}
-                </CardDescription>
-              </CardHeader>
-              <CardContent>
-                {(() => {
-                  const { total } = getNcmSummary(results.byNCM)
-                  const info = extractNcmInfo(results.byNCM)
-                  const produtos = extractProducts(results.byNCM)
-                  return (
-                    <Stack spacing={2}>
-                      <Stack direction="row" spacing={1} flexWrap="wrap">
-                        {info.chapter && <Chip label={`Capítulo: ${info.chapter}`} size="small" />}
-                        {info.position && <Chip label={`Posição: ${info.position}`} size="small" />}
-                        {info.subposition && <Chip label={`Subposição: ${info.subposition}`} size="small" />}
-                        {info.category && <Chip label={`Categoria: ${info.category}`} size="small" />}
-                        <Chip label={`Total de itens: ${total}`} color="primary" variant="outlined" size="small" />
-                      </Stack>
-
-                      {Array.isArray(produtos) && produtos.length > 0 && (
-                        <Table>
-                          <TableHeader>
-                            <TableRow>
-                              <TableHead>Produto</TableHead>
-                              <TableHead>Marca</TableHead>
-                              <TableHead>GTINs</TableHead>
-                            </TableRow>
-                          </TableHeader>
-                          <TableBody>
-                            {produtos.slice(0, 6).map((p: any, idx: number) => {
-                              const title = p?.name || p?.description || p?.title || 'Produto'
-                              const brand = p?.brand || p?.brands || p?.manufacturer || null
-                              const gtins = getGtins(p)
-                              return (
-                                <TableRow key={idx}>
-                                  <TableCell>{title}</TableCell>
-                                  <TableCell>{brand}</TableCell>
-                                  <TableCell>{gtins.join(', ')}</TableCell>
-                                </TableRow>
-                              )
-                            })}
-                          </TableBody>
-                        </Table>
-                      )}
-                    </Stack>
-                  )
-                })()}
-              </CardContent>
-              <CardFooter>
-                <Stack direction={{ xs: 'column', sm: 'row' }} spacing={1}>
-                  <Button
-                    variant="outlined"
-                    startIcon={<Copy size={16} />}
-                    onClick={() => copyToClipboard(JSON.stringify(results.byNCM, null, 2))}
-                  >
-                    Copiar JSON
-                  </Button>
-                  <Button
-                    variant="contained"
-                    startIcon={<FileText size={16} />}
-                    onClick={() => exportJson(results.byNCM, `ncm-${cleanDigits(ncmQuery)}.json`)}
-                  >
-                    Exportar JSON
-                  </Button>
-                </Stack>
-              </CardFooter>
-            </Card>
-          )}
-        </Stack>
+      {results.length > 0 && (
+        <Paper sx={{ p: 2 }}>
+          <Typography variant="h6" sx={{ mb: 2 }}>
+            Resultados da Busca
+          </Typography>
+          <TableContainer>
+            <Table>
+              <TableHead>
+                <TableRow>
+                  <TableCell>Fonte</TableCell>
+                  <TableCell>GTIN/EAN</TableCell>
+                  <TableCell>Descrição</TableCell>
+                  <TableCell>NCM</TableCell>
+                  <TableCell>Ações</TableCell>
+                </TableRow>
+              </TableHead>
+              <TableBody>
+                {results.map((product, idx) => (
+                  <TableRow key={idx}>
+                    <TableCell>
+                      <Chip label={product.source} size="small" />
+                    </TableCell>
+                    <TableCell>{product.gtin}</TableCell>
+                    <TableCell>{product.description}</TableCell>
+                    <TableCell>{product.ncm.code}</TableCell>
+                    <TableCell>
+                      <Button
+                        variant="contained"
+                        size="small"
+                        onClick={() => handleOpenDetails(product.originalProduct)}
+                        disabled={detailLoadingGtin === product.gtin}
+                      >
+                        {detailLoadingGtin === product.gtin ? (
+                          <CircularProgress size={18} color="inherit" />
+                        ) : (
+                          'Detalhes'
+                        )}
+                      </Button>
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          </TableContainer>
+        </Paper>
       )}
+
+      <ProductDetailModal
+        product={productForModal}
+        onOpenChange={() => setProductForModal(null)}
+      />
     </Stack>
   )
 }

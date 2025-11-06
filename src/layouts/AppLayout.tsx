@@ -158,7 +158,7 @@ export default function AppLayout({ mode, onToggleMode }: AppLayoutProps) {
         </List>
       </Drawer>
 
-      <Box component="main" sx={{ flexGrow: 1, p: 3, ml: `${drawerWidth}px` }}>
+      <Box component="main" sx={{ flexGrow: 1, p: 3 }}>
         <Toolbar />
         {/* Envolve o conteúdo principal com o ErrorBoundary para capturar erros */}
         <ErrorBoundary>
